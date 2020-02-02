@@ -10,8 +10,5 @@ public class PlayerController : Athlete
         float horizontal = Input.GetAxis("Horizontal");
         float vertical = Input.GetAxis("Vertical");
         targetVelocity = new Vector2(horizontal,vertical);
-        if(horizontal != 0){
-            Move();
-        }
     }
 }
