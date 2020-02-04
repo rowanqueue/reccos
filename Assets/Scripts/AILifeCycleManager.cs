@@ -21,6 +21,7 @@ public class AILifeCycleManager
 
     public void CreateDumb(Vector2 position,int team){
         GameObject dumbObj = GameObject.Instantiate(Resources.Load("Athlete")) as GameObject;
+        dumbObj.transform.parent = Services.GameController.game.transform;
         Athletes.Add(new Athlete(dumbObj).SetTeam(team).SetPosition(position.x,position.y));
 
     }

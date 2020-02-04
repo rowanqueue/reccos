@@ -4,21 +4,32 @@ using UnityEngine;
 
 public class GameController : MonoBehaviour
 {
-    public int numberOfTeams;
-    public int numberPerTeam;
+    /*public int numberOfTeams;
+    public int numberPerTeam;*/
     public List<Color> teamColors;
+    public Transform goalParent;
+    public Transform athleteParent;
     public List<Goal> goals;
     public List<int> scores;
-    public Bounds spawnArea;
+
+
+    private FiniteStateMachine<GameController> gameStateMachine;
+    public GameObject startMenu;
+    public GameObject game;
+    public bool ready;
     // Start is called before the first frame update
     void Awake()
     {
+        
+
         InitializeServices();
-        for(int j=0;j<numberOfTeams;j++){
-            for(int i = 0; i < numberPerTeam;i++){
-                float x = Random.Range(spawnArea.min.x,spawnArea.max.x);
-                float y = Random.Range(spawnArea.min.y,spawnArea.max.y);
-                Services.AILifeCycleManager.CreateDumb(new Vector2(x,y),j);
+        for(int j=0;j<athleteParent.childCount;j++){
+            Transform teamParent = athleteParent.GetChild(j);
+            for(int i = 0; i < teamParent.childCount;i++){
+                Transform spawnPoint = teamParent.GetChild(i);
+                if(spawnPoint.gameObject.activeSelf){
+                    Services.AILifeCycleManager.CreateDumb(new Vector2(spawnPoint.position.x,spawnPoint.position.y),j);
+                }
             }
         }
         
@@ -26,9 +37,10 @@ public class GameController : MonoBehaviour
         
     }
     private void Start(){
-        goals.Add(new Goal(transform.GetChild(1).gameObject).SetTeam(1));
-        goals.Add(new Goal(transform.GetChild(0).gameObject).SetTeam(0));
-        //goals.Add(new Goal(transform.GetChild(1).gameObject).SetTeam(1));
+        goals = new List<Goal>();
+        for(int i =0; i < goalParent.childCount;i++){
+            goals.Add(new Goal(goalParent.GetChild(i).gameObject).SetTeam(i));
+        }
         Services.EventManager.Register<GoalScored>(OnGoalScored);
         scores = new List<int>();
         for(int i = 0; i < goals.Count;i++){
@@ -43,7 +55,7 @@ public class GameController : MonoBehaviour
         scores[goal.whichTeam]++;
     }
     void Update(){
-        Services.AILifeCycleManager.Update();
+        gameStateMachine.Update();
     }
 
 
@@ -56,6 +68,55 @@ public class GameController : MonoBehaviour
         Services.AILifeCycleManager.Initialize();
 
         Services.Ball = GameObject.FindObjectOfType<Ball>();
+        gameStateMachine = new FiniteStateMachine<GameController>(this);
+        gameStateMachine.TransitionTo<StartMenu>();
+    }
+    private abstract class GameState : FiniteStateMachine<GameController>.State
+    {
+
+    }
+    private class StartMenu : GameState
+    {
+        public override void OnEnter(){
+            Context.game.SetActive(false);
+            Context.startMenu.SetActive(true);
+        }
+        public override void Update(){
+            if(Input.anyKeyDown){
+                TransitionTo<ResetGame>();
+            }
+        }
+        public override void OnExit(){
+            Context.startMenu.SetActive(false);
+        }
+    }
+    private  class InGame : GameState
+    {
+        public override void OnEnter(){
+            Context.game.SetActive(true);
+        }
+        public override void Update(){
+            Services.AILifeCycleManager.Update();
+        }
+    }
+    private class ResetGame : GameState
+    {
+        public override void OnEnter(){
+            Context.game.SetActive(true);
+        }
+        public override void Update(){
+            Services.AILifeCycleManager.Update();
+            Context.ready = true;
+            foreach(Athlete athlete in Services.AILifeCycleManager.Athletes){
+                if(athlete.ready == false){
+                    Context.ready = false;
+                    break;
+                }
+            }
+            if(Context.ready){
+
+            }
+        }
     }
 }
 
