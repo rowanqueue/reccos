@@ -4,15 +4,14 @@ using UnityEngine;
 
 public class Ball : MonoBehaviour
 {
-    // Start is called before the first frame update
-    void Start()
-    {
-        
-    }
-
-    // Update is called once per frame
-    void Update()
-    {
-        
+    public void OnTriggerEnter2D(Collider2D other){
+        if(other.CompareTag("Goal")){
+            foreach(Goal goal in Services.GameController.goals){
+                if(other == goal.collider){
+                    Services.EventManager.Fire(new GoalScored(goal.team));
+                    break;
+                }
+            }
+        }
     }
 }
