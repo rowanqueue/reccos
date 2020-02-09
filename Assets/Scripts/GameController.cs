@@ -1,9 +1,15 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using TMPro;
+using UnityEngine.SceneManagement;
 
 public class GameController : MonoBehaviour
 {
+    public int scoreToWin;
+    public int timeLimit;
+    float passedTime;
+    public TextMeshPro timeLimitText;
     /*public int numberOfTeams;
     public int numberPerTeam;*/
     public List<Color> teamColors;
@@ -16,6 +22,7 @@ public class GameController : MonoBehaviour
     private FiniteStateMachine<GameController> gameStateMachine;
     public GameObject startMenu;
     public GameObject game;
+    public GameObject gameOver;
     public bool ready;
     // Start is called before the first frame update
     void Awake()
@@ -37,6 +44,7 @@ public class GameController : MonoBehaviour
         
     }
     private void Start(){
+        passedTime = 0;
         goals = new List<Goal>();
         for(int i =0; i < goalParent.childCount;i++){
             goals.Add(new Goal(goalParent.GetChild(i).gameObject).SetTeam(i));
@@ -46,15 +54,26 @@ public class GameController : MonoBehaviour
         for(int i = 0; i < goals.Count;i++){
             scores.Add(0);
         }
+        Services.EventManager.Register<TimeOut>(OnTimeOut);
     }
     private void OnDestroy(){
         Services.EventManager.Unregister<GoalScored>(OnGoalScored);
+        Services.EventManager.Unregister<TimeOut>(OnTimeOut);
     }
     void OnGoalScored(AGPEvent e){
         var goal = (GoalScored)e;
         scores[goal.whichTeam]++;
     }
+    void OnTimeOut(AGPEvent e){
+        gameStateMachine.TransitionTo<GameOver>();
+    }
     void Update(){
+        
+        timeLimitText.text = ((timeLimit-(int)passedTime)/60)+":";
+        if((int)(timeLimit-(int)passedTime)%60 < 10){
+            timeLimitText.text+="0";
+        }
+        timeLimitText.text += (timeLimit-(int)passedTime)%60;
         gameStateMachine.Update();
     }
 
@@ -96,7 +115,14 @@ public class GameController : MonoBehaviour
             Context.game.SetActive(true);
         }
         public override void Update(){
+            Context.passedTime += Time.deltaTime;
             Services.AILifeCycleManager.Update();
+            if(Context.scores[0] > Context.scoreToWin || Context.scores[1] > Context.scoreToWin){
+                Context.gameStateMachine.TransitionTo<GameOver>();
+            }
+            if(Context.passedTime>Context.timeLimit){
+                Services.EventManager.Fire(new TimeOut());
+            }
         }
     }
     private class ResetGame : GameState
@@ -105,6 +131,7 @@ public class GameController : MonoBehaviour
             Context.game.SetActive(true);
         }
         public override void Update(){
+            Context.passedTime += Time.deltaTime;
             Services.AILifeCycleManager.Update();
             Context.ready = true;
             foreach(Athlete athlete in Services.AILifeCycleManager.Athletes){
@@ -114,8 +141,23 @@ public class GameController : MonoBehaviour
                 }
             }
             if(Context.ready){
-
+                Context.gameStateMachine.TransitionTo<InGame>();
             }
+        }
+
+    }
+    private class GameOver : GameState{
+        public override void OnEnter(){
+            Context.gameOver.SetActive(true);
+            Context.game.SetActive(false);
+        }
+        public override void Update(){
+            if(Input.anyKeyDown){
+                SceneManager.LoadScene(0);
+            }
+        }
+        public override void OnExit(){
+            Context.gameOver.SetActive(false);
         }
     }
 }
