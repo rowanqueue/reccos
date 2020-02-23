@@ -16,8 +16,8 @@ public class Athlete
     public int team;
 
     public GameObject gameObject;
-    SpriteRenderer spriteRenderer;
-    private Rigidbody2D rb;
+    protected SpriteRenderer spriteRenderer;
+    protected Rigidbody2D rb;
     GameObject playerTracker;
 
     Vector3 spawnPosition;
@@ -26,6 +26,11 @@ public class Athlete
     private FiniteStateMachine<Athlete> athleteStateMachine;
     private BehaviorTree.Tree<Athlete> tree;
     float lastTreeUpdate = 0f;
+
+    float anger = 0;
+    float scared = 0;
+
+    bool isReferee;
     public Athlete(GameObject gameObject){
         this.gameObject = gameObject;
         this.transform = gameObject.transform;
@@ -34,7 +39,7 @@ public class Athlete
         playerTracker = gameObject.transform.GetChild(1).gameObject;
         athleteStateMachine = new FiniteStateMachine<Athlete>(this);
         athleteStateMachine.TransitionTo<InGame>();
-        tree = new Tree<Athlete>(
+        BehaviorTree.Tree<Athlete> happyTree = new Tree<Athlete>(
             new Selector<Athlete>(
                 new Sequence<Athlete>(
                     new NotStraightShot(),
@@ -52,10 +57,61 @@ public class Athlete
 
             )
         );
+        BehaviorTree.Tree<Athlete> angryTree = new Tree<Athlete>(
+            new Selector<Athlete>(
+                new Sequence<Athlete>(
+                    new IsAngry(),
+                    new Charge()
+                ),
+                new Sequence<Athlete>(
+                    new NotStraightShot(),
+                    new RepositionForBall()
+                ),
+                new Sequence<Athlete>(
+                    new TooFar(),
+                    new BallIntoGoal()
+                ),
+                new Sequence<Athlete>(
+                    new SomethingBlockingBall(),
+                    new RepositionForBlock()
+                ),
+                new BallIntoGoal()
+            )
+        );
+        BehaviorTree.Tree<Athlete> scaredTree = new Tree<Athlete>(
+            new Selector<Athlete>(
+                new Sequence<Athlete>(
+                    new IsScared(),
+                    new RunAway()
+                ),
+                new Sequence<Athlete>(
+                    new NotStraightShot(),
+                    new RepositionForBall()
+                ),
+                new Sequence<Athlete>(
+                    new TooFar(),
+                    new BallIntoGoal()
+                ),
+                new Sequence<Athlete>(
+                    new SomethingBlockingBall(),
+                    new RepositionForBlock()
+                ),
+                new BallIntoGoal()
+            )
+        );
+        float value = Random.value;
+        if(value < 0.33f){
+            tree = happyTree;
+        }else if(value < 0.66f){
+            tree = angryTree;
+        }else{
+            tree = scaredTree;
+        }
     }
     public Athlete SetTeam(int team){
         this.team = team;
         spriteRenderer.color = Services.GameController.teamColors[team];
+        isReferee = team == 2;
         return this;
     }
     public Athlete SetPosition(float x, float y){
@@ -67,7 +123,18 @@ public class Athlete
         /*if(athleteStateMachine.CurrentState==){
             Debug.Log("A");
         }*/
-        athleteStateMachine.Update();
+         athleteStateMachine.Update();
+
+        anger+=Random.Range(0.001f,0.02f);
+        anger = Mathf.Clamp(anger,0,1f);
+        if(Vector2.Distance(transform.position,Services.Ball.transform.position) > 3f){
+            scared -= 0.3f;
+        }else{
+            scared+= Random.Range(0.001f,0.02f);
+        }
+        
+        scared = Mathf.Clamp(scared,0,1f);
+        
         
 
     }
@@ -92,10 +159,19 @@ public class Athlete
                 Context.targetVelocity = new Vector2(horizontal,vertical).normalized;
             }else{
                 Context.playerTracker.SetActive(false);
-                if(Time.time >= Context.lastTreeUpdate+0.25f){
-                     Context.tree.Update(Context);
-                     Context.lastTreeUpdate = Time.time;
+                if(Context.isReferee){
+                    if(Vector2.Distance(Context.transform.position,Services.Ball.transform.position) < 3f){
+                        Context.targetVelocity = (Context.transform.position-Services.Ball.transform.position).normalized;
+                    }else{
+                        Context.targetVelocity = (Services.Ball.transform.position-Context.transform.position).normalized;
+                    }
+                }else{
+                    if(Time.time >= Context.lastTreeUpdate+0.25f){
+                        Context.tree.Update(Context);
+                        Context.lastTreeUpdate = Time.time;
+                    }
                 }
+                
                
             }
             if(Context.targetVelocity != Vector2.zero){
@@ -142,7 +218,7 @@ public class Athlete
     public class NotStraightShot : BehaviorTree.Node<Athlete>{
         public override bool Update(Athlete context){
             float difference = context.AngleBetweenObjects(context.transform.position,Services.Ball.transform.position,Services.GameController.goals[context.team].transform.position);
-            return !(difference <= 10f);
+            return !(difference <= 20f);
         }
     }
     public class SomethingBlockingBall : BehaviorTree.Node<Athlete>{
@@ -164,6 +240,47 @@ public class Athlete
     public class TooFar : BehaviorTree.Node<Athlete>{
         public override bool Update(Athlete context){
             return Vector2.Distance(context.transform.position,Services.Ball.transform.position) > 4f;
+        }
+    }
+    public class IsAngry : BehaviorTree.Node<Athlete>{
+        public override bool Update(Athlete context){
+            return context.anger >= 1.0f;
+        }
+    }
+
+    public class Charge : BehaviorTree.Node<Athlete>{
+        public override bool Update(Athlete context){
+            Vector2 target = context.transform.position;
+            float distance = 10000000f;
+            foreach(Athlete athlete in Services.AILifeCycleManager.Athletes){
+                if(athlete == context){
+                    continue;
+                }
+                if(athlete.team == context.team){
+                    continue;
+                }
+                float thisDistance = Vector2.Distance(athlete.transform.position,context.transform.position);
+                if(thisDistance < distance){
+                    distance = thisDistance;
+                    target = athlete.transform.position;
+                }
+            }
+            context.targetVelocity = (target-(Vector2)context.transform.position).normalized;
+            if(distance < 3f){
+                context.anger = 0;
+            }
+            return true;
+        }
+    }
+    public class IsScared : BehaviorTree.Node<Athlete>{
+        public override bool Update(Athlete context){
+            return context.scared >= 1.0f;
+        }
+    }
+    public class RunAway : BehaviorTree.Node<Athlete>{
+        public override bool Update(Athlete context){
+            context.targetVelocity = (context.transform.position-Services.Ball.transform.position).normalized;
+            return true;
         }
     }
     public class BallIntoGoal : BehaviorTree.Node<Athlete>
