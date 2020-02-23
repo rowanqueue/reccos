@@ -75,7 +75,5 @@ public class GoalScored : AGPEvent
 		this.whichTeam = whichTeam;
 	}
 }
-public class TimeOut : AGPEvent
-{
-	public TimeOut(){}
-}
+public class TimeOut : AGPEvent{}
+public class ReadyUp: AGPEvent{}

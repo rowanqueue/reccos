@@ -9,6 +9,7 @@ public class GameController : MonoBehaviour
     public int scoreToWin;
     public int timeLimit;
     float passedTime;
+    float countDownForReset;
     public TextMeshPro timeLimitText;
     /*public int numberOfTeams;
     public int numberPerTeam;*/
@@ -63,6 +64,7 @@ public class GameController : MonoBehaviour
     void OnGoalScored(AGPEvent e){
         var goal = (GoalScored)e;
         scores[goal.whichTeam]++;
+        gameStateMachine.TransitionTo<ResetGame>();
     }
     void OnTimeOut(AGPEvent e){
         gameStateMachine.TransitionTo<GameOver>();
@@ -102,7 +104,7 @@ public class GameController : MonoBehaviour
         }
         public override void Update(){
             if(Input.anyKeyDown){
-                TransitionTo<ResetGame>();
+                TransitionTo<InGame>();
             }
         }
         public override void OnExit(){
@@ -129,18 +131,25 @@ public class GameController : MonoBehaviour
     {
         public override void OnEnter(){
             Context.game.SetActive(true);
+            Context.countDownForReset = 0.5f;
         }
         public override void Update(){
             Context.passedTime += Time.deltaTime;
             Services.AILifeCycleManager.Update();
-            Context.ready = true;
+            Context.ready = false;
+            int howMany = 0;
             foreach(Athlete athlete in Services.AILifeCycleManager.Athletes){
-                if(athlete.ready == false){
-                    Context.ready = false;
-                    break;
+                if(athlete.ready){
+                    howMany++;
                 }
             }
+            Context.ready = howMany >= 4;
             if(Context.ready){
+                Context.countDownForReset -= Time.deltaTime;
+                
+            }
+            if(Context.countDownForReset <= 0){
+                Services.EventManager.Fire(new ReadyUp());
                 Context.gameStateMachine.TransitionTo<InGame>();
             }
         }

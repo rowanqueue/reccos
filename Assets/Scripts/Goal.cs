@@ -4,6 +4,7 @@ using UnityEngine;
 
 public class Goal
 {
+    public Transform transform;
     public int team;
     public int score;
     GameObject pointDisplay;Vector2 nextPointPosition;
@@ -13,6 +14,7 @@ public class Goal
 
     public Goal(GameObject gameObject){
         this.gameObject = gameObject;
+        transform = gameObject.transform;
         spriteRenderers = gameObject.transform.GetChild(0).GetComponentsInChildren<SpriteRenderer>();
         collider = gameObject.GetComponent<Collider2D>();
         Services.EventManager.Register<GoalScored>(OnGoalScored);
