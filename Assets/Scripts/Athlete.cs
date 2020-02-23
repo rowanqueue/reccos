@@ -25,6 +25,7 @@ public class Athlete
 
     private FiniteStateMachine<Athlete> athleteStateMachine;
     private BehaviorTree.Tree<Athlete> tree;
+    float lastTreeUpdate = 0f;
     public Athlete(GameObject gameObject){
         this.gameObject = gameObject;
         this.transform = gameObject.transform;
@@ -36,11 +37,19 @@ public class Athlete
         tree = new Tree<Athlete>(
             new Selector<Athlete>(
                 new Sequence<Athlete>(
-                    new StraightShot(),
+                    new NotStraightShot(),
+                    new RepositionForBall()
+                ),
+                new Sequence<Athlete>(
+                    new TooFar(),
                     new BallIntoGoal()
                 ),
-                new RepositionForBall()
-                
+                new Sequence<Athlete>(
+                    new SomethingBlockingBall(),
+                    new RepositionForBlock()
+                ),
+                new BallIntoGoal()
+
             )
         );
     }
@@ -83,7 +92,11 @@ public class Athlete
                 Context.targetVelocity = new Vector2(horizontal,vertical).normalized;
             }else{
                 Context.playerTracker.SetActive(false);
-                Context.tree.Update(Context);
+                if(Time.time >= Context.lastTreeUpdate+0.25f){
+                     Context.tree.Update(Context);
+                     Context.lastTreeUpdate = Time.time;
+                }
+               
             }
             if(Context.targetVelocity != Vector2.zero){
                 Context.Move();
@@ -92,6 +105,12 @@ public class Athlete
         public override void OnExit(){
             Services.EventManager.Unregister<GoalScored>(Context.GoToResetPosition);
         }
+    }
+    public float AngleBetweenObjects(Vector2 position,Vector2 middle, Vector2 end){
+        Vector2 toGoal = (end - position).normalized;
+        Vector2 toBall = (middle - position).normalized;
+        float difference = Vector2.Angle(toGoal,toBall);
+        return difference;
     }
     private class ResetPosition : AthleteState
     {
@@ -120,30 +139,80 @@ public class Athlete
         Debug.Log("Suer");
         athleteStateMachine.TransitionTo<InGame>();
     }
-    public class StraightShot : BehaviorTree.Node<Athlete>{
+    public class NotStraightShot : BehaviorTree.Node<Athlete>{
         public override bool Update(Athlete context){
-            Vector2 toGoal = (Services.GameController.goals[context.team].transform.position - context.transform.position).normalized;
+            float difference = context.AngleBetweenObjects(context.transform.position,Services.Ball.transform.position,Services.GameController.goals[context.team].transform.position);
+            return !(difference <= 10f);
+        }
+    }
+    public class SomethingBlockingBall : BehaviorTree.Node<Athlete>{
+        public override bool Update(Athlete context){
+            RaycastHit2D hit2D;
             Vector2 toBall = (Services.Ball.transform.position - context.transform.position).normalized;
-            float difference = Vector2.Angle(toGoal,toBall);
-            Debug.Log(difference);
-            return difference <= 30f;
+            hit2D = Physics2D.Raycast(context.transform.position,toBall);
+            if(hit2D.collider != null){
+                if(hit2D.collider.CompareTag("Ball")){
+                    return !true;
+                }else{
+                    return !false;
+                }
+            }else{
+                return !true;
+            }
+        }
+    }
+    public class TooFar : BehaviorTree.Node<Athlete>{
+        public override bool Update(Athlete context){
+            return Vector2.Distance(context.transform.position,Services.Ball.transform.position) > 4f;
         }
     }
     public class BallIntoGoal : BehaviorTree.Node<Athlete>
     {
         public override bool Update(Athlete context){
-            context.targetVelocity = (Services.Ball.transform.position - context.transform.position).normalized;
+            float difference = context.AngleBetweenObjects(context.transform.position,Services.Ball.transform.position,Services.GameController.goals[context.team].transform.position);
+            Vector2 velocity = (Services.Ball.transform.position - context.transform.position).normalized;
+            velocity += new Vector2(Mathf.Cos(Mathf.Deg2Rad*difference)*0.5f,Mathf.Sin(Mathf.Deg2Rad*difference)*0.5f);
+            context.targetVelocity = velocity.normalized;
             return true;
+        }
+    }
+    public Vector2 Reposition(Vector2 self, Vector2 target, Vector2 middle){
+        Vector2 toBall = (target - self).normalized;
+        float difference = AngleBetweenObjects(self,middle,target);
+        Vector2 toBallUp = new Vector2(toBall.y,-toBall.x);
+        float differenceUp = AngleBetweenObjects(new Vector2(self.x+toBallUp.x,self.y+toBallUp.y),middle,target);
+        Vector2 toBallDown = new Vector2(-toBall.y,toBall.x);
+        float differenceDown = AngleBetweenObjects(new Vector2(self.x+toBallDown.x,self.y+toBallDown.y),middle,target);
+        if(differenceUp < differenceDown){
+            return toBallUp.normalized;
+        }else{
+            return toBallDown.normalized;
         }
     }
     public class RepositionForBall : BehaviorTree.Node<Athlete>
     {
         public override bool Update(Athlete context){
-            
+            context.targetVelocity = context.Reposition(context.transform.position,Services.Ball.transform.position,Services.GameController.goals[context.team].transform.position);
+            return true;
+        }
+    }
+    public class RepositionForBlock : BehaviorTree.Node<Athlete>
+    {
+        public override bool Update(Athlete context){
+            RaycastHit2D hit2D;
             Vector2 toBall = (Services.Ball.transform.position - context.transform.position).normalized;
-
-            toBall = new Vector2(toBall.y,-toBall.x);
-            context.targetVelocity = toBall.normalized;
+            hit2D = Physics2D.Raycast(context.transform.position,toBall);
+            Vector2 obstaclePosition = Vector2.zero;
+            if(hit2D.collider != null){
+                if(hit2D.collider.CompareTag("Ball")){
+                    return false;
+                }else{
+                    obstaclePosition = hit2D.collider.transform.position;
+                }
+            }else{
+                return false;
+            }
+            context.targetVelocity = context.Reposition(context.transform.position,obstaclePosition,Services.Ball.transform.position);
             return true;
         }
     }

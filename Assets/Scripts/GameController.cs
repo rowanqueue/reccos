@@ -41,7 +41,7 @@ public class GameController : MonoBehaviour
             }
         }
         
-        Services.AILifeCycleManager.Athletes[0].playerControlled = true;
+        //Services.AILifeCycleManager.Athletes[0].playerControlled = true;
         
     }
     private void Start(){
@@ -77,6 +77,7 @@ public class GameController : MonoBehaviour
         }
         timeLimitText.text += (timeLimit-(int)passedTime)%60;
         gameStateMachine.Update();
+        
     }
 
 
