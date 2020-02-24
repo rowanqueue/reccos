@@ -6,6 +6,7 @@ using UnityEngine.SceneManagement;
 
 public class GameController : MonoBehaviour
 {
+    public bool playerControlled;
     public int scoreToWin;
     public int timeLimit;
     float passedTime;
@@ -25,6 +26,7 @@ public class GameController : MonoBehaviour
     public GameObject game;
     public GameObject gameOver;
     public bool ready;
+    public AudioSource whistle;
     // Start is called before the first frame update
     void Awake()
     {
@@ -40,8 +42,10 @@ public class GameController : MonoBehaviour
                 }
             }
         }
-        
-        //Services.AILifeCycleManager.Athletes[0].playerControlled = true;
+        if(playerControlled){
+            Services.AILifeCycleManager.Athletes[0].playerControlled = true;
+        }
+        //
         
     }
     private void Start(){

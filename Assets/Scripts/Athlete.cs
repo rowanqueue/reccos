@@ -31,6 +31,8 @@ public class Athlete
     float scared = 0;
 
     bool isReferee;
+    Athlete[] lastIssue = new Athlete[2];
+    float lastHit = 0f;
     public Athlete(GameObject gameObject){
         this.gameObject = gameObject;
         this.transform = gameObject.transform;
@@ -112,6 +114,9 @@ public class Athlete
         this.team = team;
         spriteRenderer.color = Services.GameController.teamColors[team];
         isReferee = team == 2;
+        if(isReferee){
+            Services.EventManager.Register<PlayersHit>(OnPlayersHit);
+        }
         return this;
     }
     public Athlete SetPosition(float x, float y){
@@ -142,6 +147,25 @@ public class Athlete
         rb.velocity = Vector2.SmoothDamp(rb.velocity, targetVelocity*movementSpeed,ref velocity,movementSmoothing);
 
     }
+    public void OnPlayersHit(AGPEvent e){
+        var ev = (PlayersHit)e;
+        if(lastIssue[0] == null){//first time
+            lastIssue[0] = ev.player1;
+            lastIssue[1] = ev.player2;
+        }else{
+            if((lastIssue[0] == ev.player1 || lastIssue[1] == ev.player1) || (lastIssue[0] == ev.player2 || lastIssue[1] == ev.player2)){
+                //this is the saemas  last time, don't do it again
+                if(Time.time < lastHit+1.0f){
+                    return;
+                }
+            }else{
+                lastIssue[0] = ev.player1;
+                lastIssue[1] = ev.player2;
+            }
+        }
+        lastHit = Time.time;
+        Services.GameController.whistle.Play();
+    }
     public abstract class AthleteState : FiniteStateMachine<Athlete>.State
     {
 
@@ -160,10 +184,13 @@ public class Athlete
             }else{
                 Context.playerTracker.SetActive(false);
                 if(Context.isReferee){
-                    if(Vector2.Distance(Context.transform.position,Services.Ball.transform.position) < 3f){
+                    if(Vector2.Distance(Context.transform.position,Services.Ball.transform.position) < 2f){
                         Context.targetVelocity = (Context.transform.position-Services.Ball.transform.position).normalized;
-                    }else{
+                    }
+                    else if(Vector2.Distance(Context.transform.position,Services.Ball.transform.position) > 3f){
                         Context.targetVelocity = (Services.Ball.transform.position-Context.transform.position).normalized;
+                    }else{
+                        Context.targetVelocity = Vector2.zero;
                     }
                 }else{
                     if(Time.time >= Context.lastTreeUpdate+0.25f){
@@ -171,11 +198,25 @@ public class Athlete
                         Context.lastTreeUpdate = Time.time;
                     }
                 }
-                
-               
             }
             if(Context.targetVelocity != Vector2.zero){
                 Context.Move();
+            }
+            //check to see if they're colliding
+            foreach(Athlete athlete in Services.AILifeCycleManager.Athletes){
+                if(athlete == Context){//not yourself
+                    continue;
+                }
+                if(athlete.team == Context.team){
+                    continue;
+                }
+                if(Vector2.Distance(athlete.transform.position,Context.transform.position)  >1.2f){//too far away
+                    continue;
+                }
+                if(athlete.velocity.magnitude > 1.0f || Context.velocity.magnitude > 1.0f){
+                    Services.EventManager.Fire(new PlayersHit(athlete,Context));
+                    break;
+                }
             }
         }
         public override void OnExit(){

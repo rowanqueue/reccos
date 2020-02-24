@@ -77,3 +77,11 @@ public class GoalScored : AGPEvent
 }
 public class TimeOut : AGPEvent{}
 public class ReadyUp: AGPEvent{}
+public class PlayersHit : AGPEvent{
+	public Athlete player1;
+	public Athlete player2;
+	public PlayersHit(Athlete player1, Athlete player2){
+		this.player1 = player1;
+		this.player2 = player2;
+	}
+}
